@@ -1,0 +1,34 @@
+{
+  "title_patterns": [
+    "*meeting*"
+  ],
+  "exclude_title_patterns": [],
+  "process_names": [
+    "ms-teams",
+    "teams",
+    "teams-for-linux"
+  ],
+  "poll_interval_seconds": 2,
+  "meeting_end_grace_seconds": 10,
+  "prompt_timeout_seconds": 60,
+  "stop_recording_when_meeting_ends": true,
+  "detect_microphone_use": true,
+  "microphone_apps": [
+    "*teams*"
+  ],
+  "require_sound_with_microphone": false,
+  "obs": {
+    "host": "localhost",
+    "port": 4455,
+    "password": "",
+    "launch_if_not_running": true,
+    "executable": "",
+    "startup_wait_seconds": 20
+  },
+  "recordings": {
+    "organize": true,
+    "folder": "",
+    "group_by_meeting": true,
+    "file_name": "{date} {time} {meeting}"
+  }
+}
