@@ -122,6 +122,8 @@ public sealed class ObsRecorder : IRecorder
 {
     private volatile ObsConfig _cfg;
 
+    private string? _warnedHost;
+
     public ObsRecorder(ObsConfig cfg) => _cfg = cfg;
 
     public ObsConfig Config
@@ -133,6 +135,12 @@ public sealed class ObsRecorder : IRecorder
     private ObsWebSocket Open()
     {
         var cfg = _cfg;
+        if (!Secrets.IsLocalHost(cfg.Host) && _warnedHost != cfg.Host)
+        {
+            _warnedHost = cfg.Host;
+            Log.Warn($"OBS host {cfg.Host} is another computer: the OBS WebSocket connection is not encrypted, " +
+                     "so only use this on a network you trust (or over a VPN)");
+        }
         return ObsWebSocket.Connect(cfg.Host, cfg.Port, cfg.Password);
     }
 

@@ -8,11 +8,20 @@ public static class Log
 
     public static void Init(string file)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        var dir = Path.GetDirectoryName(file)!;
+        if (!Directory.Exists(dir))
+        {
+            Directory.CreateDirectory(dir);
+            Secrets.RestrictToUser(dir, directory: true);
+        }
+        if (!File.Exists(file)) File.WriteAllText(file, "");
+        Secrets.RestrictToUser(file); // it contains meeting names
         _file = file;
     }
 
     public static void Info(string message) => Write("INFO", message);
+
+    public static void Warn(string message) => Write("WARN", message);
 
     public static void Error(string message, Exception? ex = null) =>
         Write("ERROR", ex is null ? message : $"{message}: {ex.GetType().Name}: {ex.Message}");

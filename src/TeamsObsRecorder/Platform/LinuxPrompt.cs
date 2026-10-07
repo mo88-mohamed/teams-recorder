@@ -19,7 +19,7 @@ public sealed class LinuxPrompt : IPrompt
                 "--app-name", AppName, "--urgency", "critical",
                 "--expire-time", ((int)timeout.TotalMilliseconds).ToString(), "--wait",
                 "--action", "record=Record", "--action", "dismiss=Dismiss",
-                title, message,
+                title, Markup(message), // the body may be read as markup
             }, wait);
             return code == 0 && output.Trim() == "record" ? PromptChoice.Record : PromptChoice.Dismiss;
         }
@@ -28,7 +28,7 @@ public sealed class LinuxPrompt : IPrompt
         {
             var (code, _) = Shell.Run("zenity", new[]
             {
-                "--question", $"--title={AppName}", $"--text={title}\n\n{message}",
+                "--question", $"--title={AppName}", $"--text={Markup(title)}\n\n{Markup(message)}",
                 "--ok-label=Record", "--cancel-label=Dismiss", $"--timeout={(int)timeout.TotalSeconds}",
             }, wait);
             return code == 0 ? PromptChoice.Record : PromptChoice.Dismiss;
@@ -36,6 +36,10 @@ public sealed class LinuxPrompt : IPrompt
 
         throw new InvalidOperationException("Need notify-send (libnotify >= 0.7.9) or zenity to show the prompt");
     }
+
+    /// <summary>zenity reads --text as Pango markup; window titles must show as plain text.</summary>
+    internal static string Markup(string text) =>
+        text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 
     private bool NotifySendHasActions()
     {

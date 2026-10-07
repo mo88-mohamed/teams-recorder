@@ -45,23 +45,47 @@ public sealed class AppConfig
     /// <summary>Loads the config, writing a default one first if the file doesn't exist.</summary>
     public void Save(string path)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        CreateDirectory(path);
         var tmp = path + ".tmp";
+        File.WriteAllText(tmp, "");
+        Secrets.RestrictToUser(tmp); // before the password is written
         File.WriteAllText(tmp, JsonSerializer.Serialize(this, JsonOptions));
         File.Move(tmp, path, overwrite: true);
+    }
+
+    private static void CreateDirectory(string path)
+    {
+        var dir = Path.GetDirectoryName(Path.GetFullPath(path))!;
+        if (Directory.Exists(dir)) return;
+        Directory.CreateDirectory(dir);
+        Secrets.RestrictToUser(dir, directory: true);
     }
 
     public static AppConfig Load(string path)
     {
         if (!File.Exists(path))
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
             var defaults = new AppConfig();
-            File.WriteAllText(path, JsonSerializer.Serialize(defaults, JsonOptions));
+            defaults.Save(path);
             Log.Info($"Created default config at {path}");
             return defaults;
         }
-        return JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(path), JsonOptions) ?? new AppConfig();
+        var config = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(path), JsonOptions) ?? new AppConfig();
+        Secrets.RestrictToUser(path);
+        if (config.Obs.HasPlainPassword && Secrets.CanProtect)
+        {
+            // Typed in by hand or saved by an older version: replace it with the encrypted form.
+            try
+            {
+                config.Save(path);
+                Log.Info("Encrypted the OBS password in the config file");
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Could not encrypt the OBS password in the config file", ex);
+            }
+        }
+        return config;
     }
 }
 
@@ -69,7 +93,40 @@ public sealed class ObsConfig
 {
     public string Host { get; set; } = "localhost";
     public int Port { get; set; } = 4455;
+
+    /// <summary>The password in memory. In the file it is "password_protected" (Windows) or "password".</summary>
+    [JsonIgnore]
     public string Password { get; set; } = "";
+
+    /// <summary>Plain-text password: read for hand-edited and older configs, written only where it can't be encrypted.</summary>
+    [JsonPropertyName("password")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? PasswordPlain
+    {
+        get => Secrets.CanProtect ? null : Password;
+        set
+        {
+            if (string.IsNullOrEmpty(value)) return;
+            Password = value;
+            HasPlainPassword = true;
+        }
+    }
+
+    /// <summary>The password encrypted for this Windows user (DPAPI).</summary>
+    [JsonPropertyName("password_protected")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? PasswordProtected
+    {
+        get => Secrets.CanProtect && Password.Length > 0 ? Secrets.Protect(Password) : null;
+        set
+        {
+            if (string.IsNullOrEmpty(value) || HasPlainPassword) return; // a plain one typed in by hand wins
+            Password = Secrets.Unprotect(value) ?? "";
+        }
+    }
+
+    internal bool HasPlainPassword { get; private set; }
+
     public bool LaunchIfNotRunning { get; set; } = true;
     public string Executable { get; set; } = "";
     public double StartupWaitSeconds { get; set; } = 20;

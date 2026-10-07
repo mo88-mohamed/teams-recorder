@@ -27,6 +27,11 @@ public sealed class SettingsWindow : Window
 
     private readonly TextBox _host = Text("localhost");
     private readonly NumericUpDown _port = Number(1, 65535);
+    private readonly TextBlock _hostWarning = new()
+    {
+        Text = "OBS is on another computer. This connection isn't encrypted, so only use it on a network you trust (or over a VPN).",
+        Foreground = Brushes.IndianRed, FontSize = 12, TextWrapping = TextWrapping.Wrap, IsVisible = false,
+    };
     private readonly TextBox _password = new() { PasswordChar = '•', Watermark = "from OBS > Tools > WebSocket Server Settings" };
     private readonly CheckBox _launchObs = new() { Content = "Start OBS if it isn't running" };
     private readonly TextBox _obsPath = Text("found automatically");
@@ -88,6 +93,8 @@ public sealed class SettingsWindow : Window
         var obs = Page();
         obs.Children.Add(Row("WebSocket password", _password));
         obs.Children.Add(Row("WebSocket host", _host));
+        obs.Children.Add(_hostWarning);
+        _host.TextChanged += (_, _) => _hostWarning.IsVisible = !Secrets.IsLocalHost(_host.Text ?? "");
         obs.Children.Add(Row("WebSocket port", _port));
         obs.Children.Add(_launchObs);
         obs.Children.Add(Row("OBS program", obsPathRow));

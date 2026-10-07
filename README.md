@@ -112,7 +112,7 @@ All settings:
 | `detect_microphone_use` | `true` | Treat Teams using the microphone as a call (1:1 and group calls) |
 | `microphone_apps` | `["*teams*"]` | Which apps count when using the microphone (or playing sound) |
 | `require_sound_with_microphone` | `false` | Only count a call when Teams uses the mic **and** plays sound |
-| `obs.host` / `obs.port` / `obs.password` | `localhost` / `4455` / empty | obs-websocket connection |
+| `obs.host` / `obs.port` / `obs.password` | `localhost` / `4455` / empty | obs-websocket connection. On Windows the password is saved encrypted as `obs.password_protected`; you can still type a plain `password` and the app encrypts it on the next start |
 | `obs.launch_if_not_running` | `true` | Start OBS (minimised to tray) when Record is clicked and OBS is closed |
 | `obs.executable` | auto | Path to OBS if it isn't in the default place |
 | `obs.startup_wait_seconds` | `20` | How long to wait for a freshly started OBS to answer |
@@ -204,6 +204,19 @@ For ARM machines use `-r win-arm64` or `-r linux-arm64`. The project file makes 
   Teams opens a compact or pop-out window or the title changes.
 - If OBS was already recording when you clicked Record, the app leaves that recording
   alone and won't stop it at the end.
+
+## Security and privacy
+
+- **OBS password**: on Windows it's encrypted with your Windows account (DPAPI), so a copied
+  config file is useless on another account or PC (you'll just need to enter it again). On Linux
+  the config folder and files are readable by your user only.
+- **Network**: the app listens on no port. Its only connection is to OBS, normally on this PC.
+  The OBS WebSocket connection isn't encrypted, so if `obs.host` is another computer, the app
+  warns you; only do that on a network you trust or over a VPN.
+- **Privacy**: window titles and which apps use the mic are read on this PC only and never sent
+  anywhere. The log contains meeting names and file paths, and is private to your user.
+- The Windows exe isn't code-signed. Release zips are built by GitHub Actions from this source.
+- In many places you must tell people before you record a call.
 
 ## Known limits
 
