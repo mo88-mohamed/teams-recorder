@@ -27,8 +27,9 @@ Each OS gets one self-contained executable. No .NET install is needed to run it.
 
 ## 2. Get the executable
 
-Download the zip for your system from the repository's **Releases** page (each `v*` tag is
-built by GitHub Actions; every push to `main` also produces the zips as a build artifact):
+Download the zip for your system from the repository's **Releases** page. GitHub Actions
+builds them: a push to `main` with a new `<Version>` in `TeamsObsRecorder.csproj` publishes a
+new release.
 
 | OS | File |
 |---|---|
