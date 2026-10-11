@@ -16,6 +16,9 @@ public sealed class BackgroundService
 
     public bool FirstRun { get; }
 
+    /// <summary>The live meeting/recording state, for the tray, indicator and dashboard.</summary>
+    public MeetingWatcher Watcher => _watcher;
+
     public bool Paused
     {
         get => _watcher.Paused;

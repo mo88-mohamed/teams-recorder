@@ -12,6 +12,8 @@ public sealed class AppConfig
     public double MeetingEndGraceSeconds { get; set; } = 10;
     public double PromptTimeoutSeconds { get; set; } = 60;
     public bool StopRecordingWhenMeetingEnds { get; set; } = true;
+    /// <summary>Show a small always-on-top "REC" bar with the time and Pause/Stop while recording.</summary>
+    public bool ShowRecordingIndicator { get; set; } = true;
     /// <summary>Also treat "Teams is using the microphone" as a call (catches 1:1 and group calls).</summary>
     public bool DetectMicrophoneUse { get; set; } = true;
     public List<string> MicrophoneApps { get; set; } = new() { "*teams*" };

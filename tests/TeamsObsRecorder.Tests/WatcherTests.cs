@@ -30,6 +30,10 @@ public class WatcherTests
         public bool StartRecording() { Events.Add("start"); return !AlreadyRecording; }
         public string? OutputPath { get; set; }
         public string? StopRecording() { Events.Add("stop"); return OutputPath; }
+        public void PauseRecording() => Events.Add("pause");
+        public void ResumeRecording() => Events.Add("resume");
+        public bool? Active { get; set; }
+        public bool? IsRecordingActive() => Active;
     }
 
     private sealed class FakeMicrophone : IMicrophoneMonitor
@@ -279,5 +283,59 @@ public class WatcherTests
         var folder = Path.Combine(obsDir, "Meeting with Sara");
         Assert.Single(Directory.GetFiles(folder, "* Meeting with Sara.mkv"));
         Assert.False(File.Exists(mkv));
+    }
+
+    [Fact]
+    public async Task RecordingState_TimerPausesAndStopFromTray()
+    {
+        var lister = new FakeLister();
+        var recorder = new FakeRecorder();
+        var clock = T0;
+        var watcher = new MeetingWatcher(new AppConfig(), lister, new FakePrompt(), recorder) { UtcNow = () => clock };
+
+        lister.Windows.Add(new WindowInfo("2", "Meeting with Sara | Microsoft Teams", "ms-teams"));
+        watcher.Tick(clock);
+        await watcher.PromptTask!;
+        Assert.True(watcher.IsRecording);
+        Assert.Equal("Meeting with Sara", watcher.MeetingTitle);
+
+        clock = T0.AddSeconds(30);
+        watcher.PauseRecording();
+        Assert.True(watcher.IsRecordingPaused);
+        clock = T0.AddSeconds(90); // paused time doesn't count
+        Assert.Equal(TimeSpan.FromSeconds(30), watcher.RecordingElapsed);
+        watcher.ResumeRecording();
+        clock = T0.AddSeconds(100);
+        Assert.Equal(TimeSpan.FromSeconds(40), watcher.RecordingElapsed);
+
+        watcher.StopRecordingNow();
+        Assert.False(watcher.IsRecording);
+        watcher.Tick(clock); // still in the meeting: no new prompt, nothing restarts
+        Assert.Equal(new[] { "start", "pause", "resume", "stop" }, recorder.Events);
+
+        watcher.StartRecordingNow(); // changed their mind
+        Assert.True(watcher.IsRecording);
+        Assert.Equal(TimeSpan.Zero, watcher.RecordingElapsed);
+    }
+
+    [Fact]
+    public async Task RecordingStoppedInObs_ClearsIndicator()
+    {
+        var lister = new FakeLister();
+        var recorder = new FakeRecorder { Active = true };
+        var watcher = new MeetingWatcher(new AppConfig(), lister, new FakePrompt(), recorder);
+
+        lister.Windows.Add(new WindowInfo("2", "Meeting with Sara | Microsoft Teams", "ms-teams"));
+        watcher.Tick(T0);
+        await watcher.PromptTask!;
+        watcher.Tick(T0.AddSeconds(10));
+        Assert.True(watcher.IsRecording);
+
+        recorder.Active = false; // stopped with OBS's own button
+        watcher.Tick(T0.AddSeconds(20));
+        Assert.False(watcher.IsRecording);
+        lister.Windows.Clear();
+        watcher.Tick(T0.AddSeconds(60));
+        Assert.DoesNotContain("stop", recorder.Events); // nothing left to stop
     }
 }

@@ -52,26 +52,43 @@ sudo apt install wmctrl libnotify-bin pulseaudio-utils   # Debian/Ubuntu; use dn
 
 ## 3. Settings
 
-Start the app (double-click it). The first time, the **Settings** window opens, with General, OBS and Detection tabs. After that
-the app sits in the system tray: click the tray icon, or start the app again, to reopen
-Settings. The tray menu also has **Pause detection**, **Open log file** and **Exit**.
+Start the app (double-click it). The first time, its window opens. After that the app sits
+in the system tray: click the tray icon, or start the app again, to open the window. The tray
+menu also has **Pause detection**, **Open log file** and **Exit**.
 
-![Settings window](docs/settings.png)
+![Home page while recording](docs/home.png)
 
-In Settings you can:
+The window has a sidebar with these pages:
 
-- turn **Start automatically when I sign in** on or off,
-- enter the OBS WebSocket password and use **Test OBS connection**,
-- use **Test notification + recording**: choosing Record makes a 5-second test clip in OBS,
-- change how meetings and calls are detected,
-- choose on the **Recordings** tab where recordings go and how they're named (see below),
-- see on the **Status** tab what the app detects right now (Teams windows, apps using the
-  microphone, apps playing sound). Open it during a call to check detection.
+- **Home**: what's happening now (watching, in a meeting, recording with a timer) with
+  **Start recording**, **Pause** and **Stop** buttons; **Test OBS connection** and
+  **Test notification + recording** (choosing Record makes a 5-second test clip); and what the
+  app detects right now (Teams windows, apps using the microphone, apps playing sound). Look
+  here during a call to check detection.
+- **General**: start when you sign in, the recording indicator, stop when the meeting ends.
+- **OBS**: WebSocket password, host and port, and starting OBS.
+- **Recordings**: where recordings go and how they're named (see below).
+- **Detection**: how meetings and calls are detected.
+
+![General page](docs/settings.png)
+
+### While recording
+
+- The tray icon turns red, and its tooltip shows the recording time.
+- The tray menu shows the time and the meeting, with **Pause recording** and **Stop recording**.
+  When you're in a meeting but not recording (for example you chose Dismiss), it offers
+  **Start recording this meeting**.
+- A small bar stays on top of other windows with the time and Pause / Stop buttons. Drag it
+  anywhere, or turn it off under General.
+
+![Recording indicator](docs/indicator.png)
+
+If you stop the recording in OBS itself, the app notices within a few seconds.
 
 Saved changes apply right away; no restart needed.
 
 On Linux the tray icon needs a desktop with tray support (KDE, Cinnamon, XFCE, or GNOME
-with the AppIndicator extension). Without it, start the app again to open Settings.
+with the AppIndicator extension). Without it, start the app again to open the window.
 
 ### Recording names and folders
 
@@ -112,6 +129,7 @@ All settings:
 | `detect_microphone_use` | `true` | Treat Teams using the microphone as a call (1:1 and group calls) |
 | `microphone_apps` | `["*teams*"]` | Which apps count when using the microphone (or playing sound) |
 | `require_sound_with_microphone` | `false` | Only count a call when Teams uses the mic **and** plays sound |
+| `show_recording_indicator` | `true` | Show the always-on-top REC bar while recording |
 | `obs.host` / `obs.port` / `obs.password` | `localhost` / `4455` / empty | obs-websocket connection. On Windows the password is saved encrypted as `obs.password_protected`; you can still type a plain `password` and the app encrypts it on the next start |
 | `obs.launch_if_not_running` | `true` | Start OBS (minimised to tray) when Record is clicked and OBS is closed |
 | `obs.executable` | auto | Path to OBS if it isn't in the default place |
@@ -125,7 +143,7 @@ All settings:
 
 ## 4. Try it
 
-The Settings window has test buttons. The same checks are available from a terminal
+The Home page has test buttons. The same checks are available from a terminal
 (Command Prompt / PowerShell on Windows):
 
 ```text
@@ -177,7 +195,9 @@ For ARM machines use `-r win-arm64` or `-r linux-arm64`. The project file makes 
 |---|---|
 | `Program.cs` | Command-line options, single-instance check, picks the platform pieces |
 | `Gui/App.cs` | Tray icon and menu |
-| `Gui/SettingsWindow.cs` | Settings window |
+| `Gui/SettingsWindow.cs` | The app window: Home dashboard and settings pages |
+| `Gui/RecordingIndicator.cs` | Always-on-top REC bar with time, Pause and Stop |
+| `Gui/Ui.cs` | Shared look: light/dark colours, cards, setting rows, icons |
 | `Gui/BackgroundService.cs` | Runs the watcher and reloads settings when they change |
 | `MeetingWatcher.cs` | Title/process matching and the meeting session logic |
 | `Obs.cs` | obs-websocket v5 client (handshake, auth, requests) and start/stop/launch |

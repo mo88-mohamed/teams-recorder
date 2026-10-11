@@ -117,7 +117,8 @@ public static class Program
                 Log.Info("Already running; exiting");
                 return 0;
             }
-            // Starting it again (e.g. from the Start menu) opens the settings of the running copy.
+            // Starting it again (e.g. from the Start menu) brings up the window of the running copy.
+            if (AskRunningCopyToShowWindow(configPath)) return 0;
             return RunGui(configPath, service: null);
         }
 
@@ -133,6 +134,28 @@ public static class Program
         AppDomain.CurrentDomain.ProcessExit += (_, _) => cts.Cancel();
         new MeetingWatcher(config, lister, prompt, recorder, microphone).Run(cts.Token);
         return 0;
+    }
+
+    /// <summary>Returns true when the running copy picked up the request within a few seconds.</summary>
+    private static bool AskRunningCopyToShowWindow(string configPath)
+    {
+        App.ConfigPath = configPath;
+        var request = App.ShowRequestPath;
+        try
+        {
+            File.WriteAllText(request, "");
+            for (var i = 0; i < 30; i++)
+            {
+                Thread.Sleep(100);
+                if (!File.Exists(request)) return true;
+            }
+            File.Delete(request); // an older or headless copy is running: show our own window
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Could not reach the running copy", ex);
+        }
+        return false;
     }
 
     private static int RunGui(string configPath, BackgroundService? service)

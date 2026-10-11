@@ -31,6 +31,10 @@ public interface IRecorder
     bool StartRecording();
     /// <summary>Stops recording; returns the saved file's path when known.</summary>
     string? StopRecording();
+    void PauseRecording() { }
+    void ResumeRecording() { }
+    /// <summary>Whether OBS is recording right now; null when that can't be checked.</summary>
+    bool? IsRecordingActive() => null;
 }
 
 public static class MeetingMatcher
@@ -134,6 +138,12 @@ public sealed class MeetingWatcher
     private bool _weStartedRecording;
     private string _meetingName = "";
     private DateTime _recordingStarted;
+    private TimeSpan _elapsedBeforePause;
+    private DateTime? _runningSinceUtc;
+    private DateTime _lastObsCheck;
+
+    /// <summary>For tests and the clock: current UTC time.</summary>
+    public Func<DateTime> UtcNow { get; set; } = () => DateTime.UtcNow;
 
     public bool InMeeting { get; private set; }
 
@@ -146,6 +156,37 @@ public sealed class MeetingWatcher
         get => _config;
         set => _config = value;
     }
+    /// <summary>Name of the current meeting or call ("" when none).</summary>
+    public string MeetingTitle
+    {
+        get { lock (_gate) return InMeeting ? _meetingName : ""; }
+    }
+
+    /// <summary>True while a recording this app started is running (or paused).</summary>
+    public bool IsRecording
+    {
+        get { lock (_gate) return _weStartedRecording; }
+    }
+
+    public bool IsRecordingPaused
+    {
+        get { lock (_gate) return _weStartedRecording && _runningSinceUtc is null; }
+    }
+
+    /// <summary>How long the current recording has run, not counting pauses.</summary>
+    public TimeSpan RecordingElapsed
+    {
+        get
+        {
+            lock (_gate)
+            {
+                if (!_weStartedRecording) return TimeSpan.Zero;
+                var running = _runningSinceUtc is { } since ? UtcNow() - since : TimeSpan.Zero;
+                return _elapsedBeforePause + (running > TimeSpan.Zero ? running : TimeSpan.Zero);
+            }
+        }
+    }
+
     public Task? PromptTask { get; private set; }
     public Task? OrganizeTask { get; private set; }
 
@@ -188,6 +229,7 @@ public sealed class MeetingWatcher
                 {
                     _meetingName = MeetingName.Guess(detection, _config); // call window may appear later
                 }
+                CheckStoppedInObs(now);
                 return;
             }
 
@@ -195,17 +237,80 @@ public sealed class MeetingWatcher
             {
                 Log.Info("Meeting ended");
                 InMeeting = false;
-                if (_weStartedRecording && _config.StopRecordingWhenMeetingEnds)
-                {
-                    try
-                    {
-                        var path = _recorder.StopRecording();
-                        if (path is not null) Organize(path, _meetingName, _recordingStarted);
-                    }
-                    catch (Exception ex) { Log.Error("Could not stop OBS recording", ex); }
-                }
+                if (_weStartedRecording && _config.StopRecordingWhenMeetingEnds) StopLocked();
                 _weStartedRecording = false;
+                _runningSinceUtc = null;
             }
+        }
+    }
+
+    /// <summary>Notices when the recording was stopped in OBS itself, so the indicator goes away.</summary>
+    private void CheckStoppedInObs(DateTime now)
+    {
+        if (!_weStartedRecording || (now - _lastObsCheck).TotalSeconds < 5) return;
+        _lastObsCheck = now;
+        bool? active;
+        try { active = _recorder.IsRecordingActive(); }
+        catch { active = null; }
+        if (active != false) return;
+        Log.Info("The recording was stopped in OBS");
+        _weStartedRecording = false;
+        _runningSinceUtc = null;
+    }
+
+    private void StopLocked()
+    {
+        try
+        {
+            var path = _recorder.StopRecording();
+            if (path is not null) Organize(path, _meetingName, _recordingStarted);
+        }
+        catch (Exception ex) { Log.Error("Could not stop OBS recording", ex); }
+        _weStartedRecording = false;
+        _runningSinceUtc = null;
+    }
+
+    /// <summary>Stops the recording now (tray or indicator). The meeting goes on without a new prompt.</summary>
+    public void StopRecordingNow()
+    {
+        lock (_gate)
+        {
+            if (!_weStartedRecording) return;
+            Log.Info("Recording stopped by the user");
+            StopLocked();
+        }
+    }
+
+    /// <summary>Starts recording the current meeting, e.g. after it was dismissed.</summary>
+    public void StartRecordingNow()
+    {
+        lock (_gate)
+        {
+            if (_weStartedRecording || !InMeeting) return;
+        }
+        Start();
+    }
+
+    public void PauseRecording()
+    {
+        lock (_gate)
+        {
+            if (!_weStartedRecording || _runningSinceUtc is not { } since) return;
+            try { _recorder.PauseRecording(); }
+            catch (Exception ex) { Log.Error("Could not pause OBS recording", ex); return; }
+            _elapsedBeforePause += UtcNow() - since;
+            _runningSinceUtc = null;
+        }
+    }
+
+    public void ResumeRecording()
+    {
+        lock (_gate)
+        {
+            if (!_weStartedRecording || _runningSinceUtc is not null) return;
+            try { _recorder.ResumeRecording(); }
+            catch (Exception ex) { Log.Error("Could not resume OBS recording", ex); return; }
+            _runningSinceUtc = UtcNow();
         }
     }
 
@@ -240,6 +345,11 @@ public sealed class MeetingWatcher
         {
             if (!InMeeting) return; // meeting ended while the prompt was open
         }
+        Start();
+    }
+
+    private void Start()
+    {
         try
         {
             var started = _recorder.StartRecording();
@@ -247,6 +357,8 @@ public sealed class MeetingWatcher
             {
                 _weStartedRecording = started;
                 _recordingStarted = DateTime.Now;
+                _elapsedBeforePause = TimeSpan.Zero;
+                _runningSinceUtc = started ? UtcNow() : null;
             }
         }
         catch (Exception ex)

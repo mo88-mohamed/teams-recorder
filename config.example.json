@@ -12,6 +12,7 @@
   "meeting_end_grace_seconds": 10,
   "prompt_timeout_seconds": 60,
   "stop_recording_when_meeting_ends": true,
+  "show_recording_indicator": true,
   "detect_microphone_use": true,
   "microphone_apps": [
     "*teams*"

@@ -227,6 +227,33 @@ public sealed class ObsRecorder : IRecorder
         return string.IsNullOrEmpty(path) ? null : path;
     }
 
+    public void PauseRecording()
+    {
+        using var obs = Open();
+        obs.Request("PauseRecord");
+        Log.Info("OBS recording paused");
+    }
+
+    public void ResumeRecording()
+    {
+        using var obs = Open();
+        obs.Request("ResumeRecord");
+        Log.Info("OBS recording resumed");
+    }
+
+    public bool? IsRecordingActive()
+    {
+        try
+        {
+            using var obs = Open();
+            return IsRecording(obs);
+        }
+        catch
+        {
+            return null; // OBS closed or unreachable: don't guess
+        }
+    }
+
     private static bool IsRecording(ObsWebSocket obs) =>
         obs.Request("GetRecordStatus")["outputActive"]?.GetValue<bool>() == true;
 }

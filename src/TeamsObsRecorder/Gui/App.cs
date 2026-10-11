@@ -5,6 +5,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
+using Avalonia.Threading;
 
 namespace TeamsObsRecorder.Gui;
 
@@ -19,6 +20,13 @@ public sealed class App : Application
 
     private SettingsWindow? _settings;
     private TrayIcon? _tray;
+    private RecordingIndicator? _indicator;
+    private readonly DispatcherTimer _stateTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private string _trayIconName = "";
+
+    /// <summary>A second copy of the app creates this file to ask the running copy to show its window.</summary>
+    public static string ShowRequestPath =>
+        Path.Combine(Path.GetDirectoryName(Path.GetFullPath(ConfigPath))!, "show-settings.request");
 
     public static WindowIcon LoadIcon(string name) =>
         new(AssetLoader.Open(new Uri($"avares://TeamsObsRecorder/Assets/{name}")));
@@ -31,6 +39,7 @@ public sealed class App : Application
         Name = "Teams OBS Recorder";
         RequestedThemeVariant = ThemeVariant.Default; // follows the OS light/dark setting
         Styles.Add(new FluentTheme());
+        Ui.AddThemeResources(this);
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -57,13 +66,25 @@ public sealed class App : Application
         var settings = new NativeMenuItem("Settings…");
         settings.Click += (_, _) => ShowSettings();
 
+        var watcher = service.Watcher;
+        var recState = new NativeMenuItem("● Recording") { IsEnabled = false };
+        var recStart = new NativeMenuItem("Start recording this meeting");
+        recStart.Click += (_, _) => Task.Run(watcher.StartRecordingNow);
+        var recPause = new NativeMenuItem("Pause recording");
+        recPause.Click += (_, _) => Task.Run(() =>
+        {
+            if (watcher.IsRecordingPaused) watcher.ResumeRecording(); else watcher.PauseRecording();
+        });
+        var recStop = new NativeMenuItem("Stop recording");
+        recStop.Click += (_, _) => Task.Run(watcher.StopRecordingNow);
+        var recSeparator = new NativeMenuItemSeparator();
+
         var pause = new NativeMenuItem("Pause detection");
         pause.Click += (_, _) =>
         {
             service.Paused = !service.Paused;
             pause.Header = service.Paused ? "Resume detection" : "Pause detection";
-            _tray!.Icon = LoadIcon(service.Paused ? "icon-paused.png" : "icon.png");
-            _tray.ToolTipText = service.Paused ? "Teams OBS Recorder (paused)" : "Teams OBS Recorder";
+            UpdateState();
         };
 
         var log = new NativeMenuItem("Open log file");
@@ -77,6 +98,11 @@ public sealed class App : Application
         };
 
         var menu = new NativeMenu();
+        menu.Items.Add(recState);
+        menu.Items.Add(recStart);
+        menu.Items.Add(recPause);
+        menu.Items.Add(recStop);
+        menu.Items.Add(recSeparator);
         menu.Items.Add(settings);
         menu.Items.Add(pause);
         menu.Items.Add(log);
@@ -92,13 +118,60 @@ public sealed class App : Application
         };
         _tray.Clicked += (_, _) => ShowSettings();
         TrayIcon.SetIcons(this, new TrayIcons { _tray });
+
+        // Keeps the tray icon, its menu and the floating indicator in step with the recording.
+        void UpdateState()
+        {
+            var recording = watcher.IsRecording;
+            var paused = watcher.IsRecordingPaused;
+            var meeting = watcher.MeetingTitle;
+            var time = Ui.Clock(watcher.RecordingElapsed);
+
+            recState.IsVisible = recPause.IsVisible = recStop.IsVisible = recording;
+            recStart.IsVisible = !recording && meeting.Length > 0;
+            recSeparator.IsVisible = recording || meeting.Length > 0;
+            recState.Header = $"{(paused ? "❚❚ Paused" : "● Recording")} {time}{(meeting.Length > 0 ? $" · {meeting}" : "")}";
+            recPause.Header = paused ? "Resume recording" : "Pause recording";
+
+            var icon = recording ? "icon-recording.png" : service.Paused ? "icon-paused.png" : "icon.png";
+            if (icon != _trayIconName)
+            {
+                _trayIconName = icon;
+                _tray!.Icon = LoadIcon(icon);
+            }
+            _tray!.ToolTipText = recording
+                ? $"Teams OBS Recorder: {(paused ? "paused" : "recording")} {time}"
+                : service.Paused ? "Teams OBS Recorder (detection paused)" : "Teams OBS Recorder";
+
+            var wantIndicator = recording && watcher.Config.ShowRecordingIndicator;
+            if (wantIndicator && _indicator is null)
+            {
+                _indicator = new RecordingIndicator(watcher);
+                _indicator.Closed += (_, _) => _indicator = null;
+                _indicator.Show();
+            }
+            else if (!wantIndicator && _indicator is not null)
+            {
+                _indicator.Close();
+            }
+
+            if (File.Exists(ShowRequestPath))
+            {
+                try { File.Delete(ShowRequestPath); } catch { /* the other copy may delete it too */ }
+                ShowSettings();
+            }
+        }
+
+        _stateTimer.Tick += (_, _) => UpdateState();
+        _stateTimer.Start();
+        UpdateState();
     }
 
     private void ShowSettings()
     {
         if (_settings is null)
         {
-            _settings = new SettingsWindow(ConfigPath);
+            _settings = new SettingsWindow(ConfigPath, Service);
             _settings.Closed += (_, _) => _settings = null;
             _settings.Show();
         }
